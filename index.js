@@ -28,8 +28,8 @@ ${JSON.stringify(exampleObj)}`;
   console.log("==> Calling Gemini API...");
   console.log("==> GEMINI_API_KEY set:", !!GEMINI_API_KEY);
 
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
-  console.log("==> URL model: gemini-2.0-flash");
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
+  console.log("==> URL model: gemini-1.5-flash-latest");
 
   const response = await axios.post(
     url,
