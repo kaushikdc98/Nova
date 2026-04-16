@@ -5,7 +5,7 @@ const app = express();
 app.use(express.json());
 
 const SLACK_BOT_TOKEN = process.env.SLACK_BOT_TOKEN;
-const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 
 const LANGUAGES = ["English", "Hindi", "Telugu", "Tamil"];
 
@@ -20,33 +20,22 @@ async function translateText(text, detectedLang) {
   const targets = LANGUAGES.filter(l => l !== detectedLang);
   const exampleObj = targets.reduce((acc, l) => ({ ...acc, [l]: "translation here" }), {});
 
-  const response = await axios.post(
-    "https://api.anthropic.com/v1/messages",
-    {
-      model: "claude-sonnet-4-20250514",
-      max_tokens: 1000,
-      messages: [
-        {
-          role: "user",
-          content: `You are a translation assistant. Translate the following ${detectedLang} text into ${targets.join(", ")}.
+  const prompt = `You are a translation assistant. Translate the following ${detectedLang} text into ${targets.join(", ")}.
 
 Text: "${text}"
 
 Respond ONLY with a JSON object like this (no markdown, no extra text):
-${JSON.stringify(exampleObj)}`
-        }
-      ]
-    },
+${JSON.stringify(exampleObj)}`;
+
+  const response = await axios.post(
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
     {
-      headers: {
-        "x-api-key": ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json"
-      }
-    }
+      contents: [{ parts: [{ text: prompt }] }]
+    },
+    { headers: { "Content-Type": "application/json" } }
   );
 
-  const raw = response.data.content.map(b => b.text || "").join("");
+  const raw = response.data.candidates[0].content.parts[0].text;
   const clean = raw.replace(/```json|```/g, "").trim();
   return JSON.parse(clean);
 }
@@ -63,38 +52,31 @@ async function postToSlack(channel, text) {
 const processedEvents = new Set();
 
 app.post("/slack/events", async (req, res) => {
-  console.log("==> Incoming request body:", JSON.stringify(req.body));
+  console.log("==> Incoming event:", JSON.stringify(req.body));
 
   const { type, challenge, event } = req.body;
 
   if (type === "url_verification") {
-    console.log("==> URL verification challenge received");
+    console.log("==> URL verification");
     return res.json({ challenge });
   }
 
   res.sendStatus(200);
 
-  if (!event) {
-    console.log("==> No event in payload, skipping");
-    return;
-  }
-
-  console.log("==> Event type:", event.type, "| bot_id:", event.bot_id);
-
-  if (event.type !== "app_mention" || event.bot_id) {
-    console.log("==> Skipping — not an app_mention or is a bot message");
+  if (!event || event.type !== "app_mention" || event.bot_id) {
+    console.log("==> Skipping non-mention or bot message");
     return;
   }
 
   if (processedEvents.has(event.client_msg_id)) {
-    console.log("==> Duplicate event, skipping");
+    console.log("==> Duplicate, skipping");
     return;
   }
   processedEvents.add(event.client_msg_id);
   setTimeout(() => processedEvents.delete(event.client_msg_id), 60000);
 
   const userText = event.text.replace(/<@[^>]+>\s*/g, "").trim();
-  console.log("==> User text after stripping mention:", userText);
+  console.log("==> User text:", userText);
 
   if (!userText) {
     return postToSlack(event.channel, "Please mention me with some text. Example: `@Nova Hello, how are you?`");
@@ -105,7 +87,7 @@ app.post("/slack/events", async (req, res) => {
     console.log("==> Detected language:", detectedLang);
 
     const translations = await translateText(userText, detectedLang);
-    console.log("==> Translations received:", JSON.stringify(translations));
+    console.log("==> Translations:", JSON.stringify(translations));
 
     const langEmoji = { English: "🇬🇧", Hindi: "🇮🇳", Telugu: "🌸", Tamil: "🌴" };
     let reply = `*Detected language:* ${langEmoji[detectedLang]} ${detectedLang}\n\n`;
@@ -114,17 +96,16 @@ app.post("/slack/events", async (req, res) => {
     }
 
     await postToSlack(event.channel, reply);
-    console.log("==> Reply sent successfully");
+    console.log("==> Reply sent!");
   } catch (err) {
-    console.error("==> Translation error:", err.response?.data || err.message);
+    console.error("==> Error:", err.response?.data || err.message);
     await postToSlack(event.channel, "Sorry, I couldn't translate that. Please try again.");
   }
 });
 
-app.get("/", (req, res) => {
-  console.log("==> Health check hit");
-  res.send("Nova Translation Bot is running!");
-});
+app.get("/", (req, res) => res.send("Nova Translation Bot is running!"));
 
 const PORT = process.env.PORT || 10000;
 app.listen(PORT, () => console.log(`Nova bot listening on port ${PORT}`));
+
+  
