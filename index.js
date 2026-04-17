@@ -3,18 +3,15 @@ const express = require('express');
 const { App } = require('@slack/bolt');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-// Catch crashes before they kill the process silently
 process.on('unhandledRejection', (err) => console.error('Unhandled:', err));
 process.on('uncaughtException', (err) => console.error('Exception:', err));
 
-// Express keeps Render happy (it needs an HTTP server)
 const web = express();
 web.get('/', (_, res) => res.send('Nova Bot is alive'));
 web.listen(process.env.PORT || 3000, () =>
   console.log('HTTP server ready on port', process.env.PORT || 3000)
 );
 
-// Slack + Gemini setup
 const slackApp = new App({
   token: process.env.SLACK_BOT_TOKEN,
   appToken: process.env.SLACK_APP_TOKEN,
@@ -22,7 +19,7 @@ const slackApp = new App({
 });
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
 
 async function transliterate(text) {
   const prompt = `Transliterate the following text into romanized (English letters only):
