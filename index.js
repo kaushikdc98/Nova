@@ -3,7 +3,15 @@ const express = require('express');
 const { App } = require('@slack/bolt');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-// 🌐 Express server (Render needs this)
+// 🛑 GLOBAL ERROR HANDLING (no silent crashes)
+process.on('unhandledRejection', (err) => {
+  console.error('❌ Unhandled Rejection:', err);
+});
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught Exception:', err);
+});
+
+// 🌐 EXPRESS SERVER (Render needs this)
 const web = express();
 
 web.get('/', (req, res) => {
@@ -15,26 +23,29 @@ web.listen(PORT, () => {
   console.log(`🌐 Server running on port ${PORT}`);
 });
 
-// 🔐 Check env variables
+// 🔐 ENV CHECK
 if (!process.env.SLACK_BOT_TOKEN) throw new Error("Missing SLACK_BOT_TOKEN");
 if (!process.env.SLACK_APP_TOKEN) throw new Error("Missing SLACK_APP_TOKEN");
 if (!process.env.GEMINI_API_KEY) throw new Error("Missing GEMINI_API_KEY");
 
-// 🤖 Slack App
+// 🤖 SLACK APP
 const slackApp = new App({
   token: process.env.SLACK_BOT_TOKEN,
   appToken: process.env.SLACK_APP_TOKEN,
   socketMode: true,
 });
 
-// 🧠 Gemini setup (WORKING MODEL)
+// 🧠 GEMINI SETUP (ONLY VALID MODEL)
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 
+const MODEL_NAME = "gemini-2.0-flash"; // ✅ FINAL WORKING MODEL
+console.log("🔥 USING MODEL:", MODEL_NAME);
+
 const model = genAI.getGenerativeModel({
-  model: "gemini-2.0-flash"
+  model: MODEL_NAME
 });
 
-// 🔁 Transliteration function
+// 🔁 TRANSLITERATION FUNCTION
 async function transliterate(text) {
   try {
     const prompt = `
@@ -62,16 +73,18 @@ Text: "${text}"
     return result.response.text().trim();
 
   } catch (err) {
-    console.error("Gemini Error:", err);
-    return "⚠️ Error processing request";
+    console.error("❌ Gemini Error FULL:", err);
+    return "⚠️ Gemini API error (check logs)";
   }
 }
 
-// 📩 Slack message listener
+// 📩 SLACK LISTENER
 slackApp.message(async ({ message, client }) => {
   try {
     if (message.subtype || message.bot_id) return;
     if (!message.text) return;
+
+    console.log("📩 Incoming:", message.text);
 
     const output = await transliterate(message.text);
 
@@ -82,17 +95,17 @@ slackApp.message(async ({ message, client }) => {
     });
 
   } catch (err) {
-    console.error("Slack Error:", err);
+    console.error("❌ Slack Error:", err);
   }
 });
 
-// 🚀 Start bot
+// 🚀 START BOT
 (async () => {
   try {
     console.log("🚀 Starting Slack bot...");
     await slackApp.start();
-    console.log("✅ Bot is running!");
+    console.log("✅ Bot is running successfully!");
   } catch (err) {
-    console.error("❌ Startup Error:", err);
+    console.error("❌ STARTUP ERROR:", err);
   }
 })();
