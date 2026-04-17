@@ -1,43 +1,37 @@
 require('dotenv').config();
 const express = require('express');
 const { App } = require('@slack/bolt');
-const Anthropic = require('@anthropic-ai/sdk');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-// 🌐 Express server (RENDER FIX)
+// 🌐 Express server (for Render)
 const web = express();
 
 web.get('/', (req, res) => {
-  res.send('Nova Transliteration Bot is running 🚀');
+  res.send('Nova Gemini Transliteration Bot is running 🚀');
 });
 
 web.listen(process.env.PORT || 3000, () => {
   console.log('🌐 Web server running');
 });
 
-// 🤖 Slack App (Socket Mode)
+// 🤖 Slack App
 const slackApp = new App({
   token: process.env.SLACK_BOT_TOKEN,
   appToken: process.env.SLACK_APP_TOKEN,
   socketMode: true,
 });
 
-// 🧠 Claude Client
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
-});
+// 🧠 Gemini setup
+const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-// 🛑 Prevent duplicate messages
+// 🛑 Prevent duplicates
 const processed = new Set();
 
-// 🔥 MAIN FUNCTION (MULTI LANGUAGE TRANSLITERATION)
+// 🔥 MAIN FUNCTION
 async function transliterateAll(text) {
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 500,
-    messages: [
-      {
-        role: 'user',
-        content: `You are a multilingual transliteration engine.
+  const prompt = `
+You are a multilingual transliteration engine.
 
 Convert the input into:
 - English
@@ -48,52 +42,53 @@ Convert the input into:
 Strict rules:
 - Use ONLY English alphabets
 - Do NOT use Telugu, Tamil, or Hindi scripts
-- Do NOT explain anything
-- Keep it short and natural
+- No explanations
+- Keep it natural
 
-Output EXACTLY like this:
+Output EXACTLY like:
 
 English: ...
 Telugu: ...
 Tamil: ...
 Hindi: ...
 
-Message: """${text}"""`,
-      },
-    ],
-  });
+Message: """${text}"""
+`;
 
-  return response.content[0].text.trim();
+  const result = await model.generateContent(prompt);
+  const response = await result.response;
+  return response.text().trim();
 }
 
-// 📩 Slack Listener
+// 📩 Slack listener
 slackApp.message(async ({ message, client, logger }) => {
   try {
     if (message.subtype || message.bot_id) return;
     if (!message.text || message.text.trim().length < 2) return;
 
-    // prevent duplicates
     if (processed.has(message.client_msg_id)) return;
     processed.add(message.client_msg_id);
     if (processed.size > 1000) {
       processed.delete(processed.values().next().value);
     }
 
-    const result = await transliterateAll(message.text);
+    const output = await transliterateAll(message.text);
 
     await client.chat.postMessage({
       channel: message.channel,
       thread_ts: message.ts,
-      text: `🌍 *Multi-language Transliteration*\n\n${result}`,
+      text: `🌍 *Nova Transliteration Bot*\n\n${output}`,
     });
 
-  } catch (error) {
-    logger.error('Error:', error);
+  } catch (err) {
+    logger.error(err);
   }
 });
 
-// 🚀 START SLACK BOT
+// 🚀 Start bot
 (async () => {
   await slackApp.start();
-  console.log('✅ Nova Bot is running in Socket Mode!');
+  console.log('✅ Gemini Slack Bot Running!');
 })();
+
+    
