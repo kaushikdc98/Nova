@@ -3,7 +3,7 @@ const express = require('express');
 const { App } = require('@slack/bolt');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-// 🌐 EXPRESS SERVER (keeps Render alive)
+// 🌐 Express server (Render needs this)
 const web = express();
 
 web.get('/', (req, res) => {
@@ -15,33 +15,34 @@ web.listen(PORT, () => {
   console.log(`🌐 Server running on port ${PORT}`);
 });
 
-// 🔐 ENV CHECK
+// 🔐 Check env variables
 if (!process.env.SLACK_BOT_TOKEN) throw new Error("Missing SLACK_BOT_TOKEN");
 if (!process.env.SLACK_APP_TOKEN) throw new Error("Missing SLACK_APP_TOKEN");
 if (!process.env.GEMINI_API_KEY) throw new Error("Missing GEMINI_API_KEY");
 
-// 🤖 SLACK APP
+// 🤖 Slack App
 const slackApp = new App({
   token: process.env.SLACK_BOT_TOKEN,
   appToken: process.env.SLACK_APP_TOKEN,
   socketMode: true,
 });
 
-// 🧠 GEMINI (SAFE MODEL — NO 404)
+// 🧠 Gemini setup (WORKING MODEL)
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+
 const model = genAI.getGenerativeModel({
-  model: "gemini-pro"   // ✅ THIS WORKS
+  model: "gemini-2.0-flash"
 });
 
-// 🔁 TRANSLITERATION FUNCTION
+// 🔁 Transliteration function
 async function transliterate(text) {
   try {
     const prompt = `
 Convert this into:
 - English
-- Telugu (in English letters)
-- Tamil (in English letters)
-- Hindi (in English letters)
+- Telugu (in English letters only)
+- Tamil (in English letters only)
+- Hindi (in English letters only)
 
 Rules:
 - Only English alphabets
@@ -66,7 +67,7 @@ Text: "${text}"
   }
 }
 
-// 📩 SLACK LISTENER
+// 📩 Slack message listener
 slackApp.message(async ({ message, client }) => {
   try {
     if (message.subtype || message.bot_id) return;
@@ -85,7 +86,7 @@ slackApp.message(async ({ message, client }) => {
   }
 });
 
-// 🚀 START BOT
+// 🚀 Start bot
 (async () => {
   try {
     console.log("🚀 Starting Slack bot...");
