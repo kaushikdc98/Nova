@@ -3,92 +3,102 @@ const express = require('express');
 const { App } = require('@slack/bolt');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
 
-// 🌐 Express server (for Render)
+// 🛑 GLOBAL ERROR HANDLING (prevents silent crash)
+process.on('unhandledRejection', (err) => {
+  console.error('❌ Unhandled Rejection:', err);
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('❌ Uncaught Exception:', err);
+});
+
+// 🌐 EXPRESS SERVER (REQUIRED FOR RENDER)
 const web = express();
 
 web.get('/', (req, res) => {
-  res.send('Nova Gemini Transliteration Bot is running 🚀');
+  res.send('Nova Bot is running 🚀');
 });
 
-web.listen(process.env.PORT || 3000, () => {
-  console.log('🌐 Web server running');
+const PORT = process.env.PORT || 3000;
+web.listen(PORT, () => {
+  console.log(`🌐 Server running on port ${PORT}`);
 });
 
-// 🤖 Slack App
+// 🔍 CHECK ENV VARIABLES
+if (!process.env.SLACK_BOT_TOKEN) {
+  throw new Error("Missing SLACK_BOT_TOKEN");
+}
+if (!process.env.SLACK_APP_TOKEN) {
+  throw new Error("Missing SLACK_APP_TOKEN");
+}
+if (!process.env.GEMINI_API_KEY) {
+  throw new Error("Missing GEMINI_API_KEY");
+}
+
+// 🤖 SLACK APP (SOCKET MODE)
 const slackApp = new App({
   token: process.env.SLACK_BOT_TOKEN,
   appToken: process.env.SLACK_APP_TOKEN,
   socketMode: true,
 });
 
-// 🧠 Gemini setup
+// 🧠 GEMINI SETUP
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
 
-// 🛑 Prevent duplicates
-const processed = new Set();
-
-// 🔥 MAIN FUNCTION
-async function transliterateAll(text) {
+// 🔁 TRANSLITERATION FUNCTION
+async function transliterate(text) {
   const prompt = `
-You are a multilingual transliteration engine.
-
-Convert the input into:
+Convert this into:
 - English
-- Telugu (in English letters only)
-- Tamil (in English letters only)
-- Hindi (in English letters only)
+- Telugu (in English letters)
+- Tamil (in English letters)
+- Hindi (in English letters)
 
-Strict rules:
-- Use ONLY English alphabets
-- Do NOT use Telugu, Tamil, or Hindi scripts
-- No explanations
-- Keep it natural
+Rules:
+- Only English alphabets
+- No native scripts
+- No explanation
 
-Output EXACTLY like:
-
+Format:
 English: ...
 Telugu: ...
 Tamil: ...
 Hindi: ...
 
-Message: """${text}"""
+Text: "${text}"
 `;
 
   const result = await model.generateContent(prompt);
-  const response = await result.response;
-  return response.text().trim();
+  return result.response.text().trim();
 }
 
-// 📩 Slack listener
+// 📩 SLACK MESSAGE LISTENER
 slackApp.message(async ({ message, client, logger }) => {
   try {
     if (message.subtype || message.bot_id) return;
-    if (!message.text || message.text.trim().length < 2) return;
+    if (!message.text) return;
 
-    if (processed.has(message.client_msg_id)) return;
-    processed.add(message.client_msg_id);
-    if (processed.size > 1000) {
-      processed.delete(processed.values().next().value);
-    }
-
-    const output = await transliterateAll(message.text);
+    const output = await transliterate(message.text);
 
     await client.chat.postMessage({
       channel: message.channel,
       thread_ts: message.ts,
-      text: `🌍 *Nova Transliteration Bot*\n\n${output}`,
+      text: output,
     });
 
   } catch (err) {
-    logger.error(err);
+    logger.error("Message Error:", err);
   }
 });
 
-// 🚀 Start bot
+// 🚀 START BOT
 (async () => {
-  await slackApp.start();
-  console.log('✅ Gemini Slack Bot Running!');
+  try {
+    console.log("🚀 Starting Slack bot...");
+    await slackApp.start();
+    console.log("✅ Bot is running!");
+  } catch (err) {
+    console.error("❌ Startup Error:", err);
+  }
 })();
-
-    
