@@ -19,7 +19,7 @@ const slackApp = new App({
 });
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash-latest' });
+const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
 async function transliterate(text) {
   const prompt = `Transliterate the following text into romanized (English letters only):
